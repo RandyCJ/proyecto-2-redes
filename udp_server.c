@@ -12,39 +12,66 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #define BUFSIZE 1024
 
-/*
- * error - wrapper for perror
- */
+struct args {
+    struct sockaddr_in clientaddr;
+    char buf[1024];
+	int n;
+	int socket;
+	int client_len;
+};
+
+pthread_t threads[15];
+
 void error(char *msg)
 {
 	perror(msg);
 	exit(1);
 }
 
-int main(int argc, char **argv)
+void *handle_request(void *t_args){
+	
+	struct hostent *hostp; /* client host info */
+	char *hostaddrp;	/* dotted decimal host addr string */
+
+	hostp = gethostbyaddr((const char *)&((struct args*)t_args)->clientaddr.sin_addr.s_addr,
+					sizeof(((struct args*)t_args)->clientaddr.sin_addr.s_addr),
+					AF_INET);
+	if (hostp == NULL)
+		error("ERROR on gethostbyaddr");
+	hostaddrp = inet_ntoa(((struct args*)t_args)->clientaddr.sin_addr);
+	if (hostaddrp == NULL)
+		error("ERROR on inet_ntoa\n");
+	printf("server received %d bytes\n", ((struct args*)t_args)->n);
+
+	/* 
+		* sendto: echo the input back to the client 
+	*/
+	int n = sendto(((struct args*)t_args)->socket, ((struct args*)t_args)->buf, ((struct args*)t_args)->n, 0,
+			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
+	if (n < 0)
+		error("ERROR in sendto");
+}
+
+int main()
 {
 	int sockfd;		/* socket */
 	int portno;		/* port to listen on */
 	int clientlen;		/* byte size of client's address */
 	struct sockaddr_in serveraddr;	/* server's addr */
 	struct sockaddr_in clientaddr;	/* client addr */
-	struct hostent *hostp;	/* client host info */
 	char buf[BUFSIZE];		/* message buf */
-	char *hostaddrp;	/* dotted decimal host addr string */
 	int optval;		/* flag value for setsockopt */
 	int n;			/* message byte size */
 
 	/* 
 	 * check command line arguments 
 	 */
-	if (argc != 2) {
-		fprintf(stderr, "usage: %s <port>\n", argv[0]);
-		exit(1);
-	}
-	portno = atoi(argv[1]);
+	portno = 53;
 
 	/* 
 	 * socket: create the parent socket 
@@ -81,36 +108,44 @@ int main(int argc, char **argv)
 	 * main loop: wait for a datagram, then echo it
 	 */
 	clientlen = sizeof(clientaddr);
+	int i = 0;
 	while (1) {
 
 		/*
 		 * recvfrom: receive a UDP datagram from a client
 		 */
-		// buf = malloc(BUFSIZE);
 		n = recvfrom(sockfd, buf, BUFSIZE, 0,
 			     (struct sockaddr *)&clientaddr, &clientlen);
 		if (n < 0)
 			error("ERROR in recvfrom");
+		
+		struct args *thread_args = (struct args *)malloc(sizeof(struct args));
+		thread_args->clientaddr = clientaddr;
+		strcpy(thread_args->buf, buf);
+		thread_args->n = n;
+		thread_args->socket = sockfd;
+		thread_args->client_len = clientlen;
 
-		/* 
-		 * gethostbyaddr: determine who sent the datagram
-		 */
-		hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr,
-				      sizeof(clientaddr.sin_addr.s_addr),
-				      AF_INET);
-		if (hostp == NULL)
-			error("ERROR on gethostbyaddr");
-		hostaddrp = inet_ntoa(clientaddr.sin_addr);
-		if (hostaddrp == NULL)
-			error("ERROR on inet_ntoa\n");
-		printf("server received %d bytes\n", n);
+		if (pthread_create(&threads[i++], NULL, handle_request, (void *) thread_args) != 0){
+			printf("Failed to create thread\n");
+		}
 
-		/* 
-		 * sendto: echo the input back to the client 
-		 */
-		n = sendto(sockfd, buf, n, 0,
-			   (struct sockaddr *)&clientaddr, clientlen);
-		if (n < 0)
-			error("ERROR in sendto");
+		if (i >= 15) {
+            // Update i
+            i = 0;
+ 
+            while (i < 15) {
+                // Suspend execution of
+                // the calling thread
+                // until the target
+                // thread terminates
+                pthread_join(threads[i++],
+                             NULL);
+            }
+ 
+            // Update i
+            i = 0;
+        }
+
 	}
 }

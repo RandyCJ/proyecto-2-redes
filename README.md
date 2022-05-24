@@ -2,7 +2,7 @@
 
 To test udp echo server
 
-`gcc -o server udp_server.c && ./server`
+`gcc -o server udp_server.c -pthread && ./server`
 
 In another terminal
 
