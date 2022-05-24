@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+
+  udp-server:
+      container_name: udp-server
+      build:
+        context: ./udp_server

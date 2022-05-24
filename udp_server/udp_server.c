@@ -35,6 +35,8 @@ void error(char *msg)
 
 void *handle_request(void *t_args){
 	
+	int socket = ((struct args*)t_args)->socket;
+
 	struct hostent *hostp; /* client host info */
 	char *hostaddrp;	/* dotted decimal host addr string */
 
