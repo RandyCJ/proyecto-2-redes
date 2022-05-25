@@ -6,3 +6,10 @@ services:
       container_name: udp-server
       build:
         context: ./udp_server
+
+  dns-api:
+      privileged: true
+      build:
+        context: ./api
+      ports:
+        - 443:443
