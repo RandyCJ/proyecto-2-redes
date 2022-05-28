@@ -2,5 +2,4 @@ FROM python:3.9
 WORKDIR /api
 COPY . .
 RUN pip install -r requirements.txt
-ENTRYPOINT ["python"]
-CMD ["api.py"]
+CMD tail -f /dev/null
