@@ -179,9 +179,52 @@ void *handle_request(void *t_args){
 	struct DNS_HEADER *dns = NULL;
 	dns = (struct DNS_HEADER *)(char*)((struct args*)t_args)->buf;
 	
-	for (int i = 13; i < ((struct args*)t_args)->n-5; i++)
-	{				
-		printf(" %i : %c : %u \n", i, ((struct args*)t_args)->buf[i], ((struct args*)t_args)->buf[i]);
+	char hostname[BUFSIZE] = "";
+	char char_tmp[2];
+	int start = 12;
+	int amount = (int)((struct args*)t_args)->buf[start];
+	//i < start + amount
+	for (int i = start+1; ((struct args*)t_args)->buf[i] != 0; i++){
+		if (i == start + amount + 1){
+			start = start + amount + 1;
+			amount = (int)((struct args*)t_args)->buf[i];
+			strcat(hostname, ".");
+			continue;
+		}
+		sprintf(char_tmp, "%c", ((struct args*)t_args)->buf[i]);
+		strcat(hostname, char_tmp);
+	}
+
+	printf("HOSTNAME: %s\n", hostname);
+
+	CURL *curl;
+	CURLcode res;
+	
+	/* In windows, this will init the winsock stuff */
+	curl_global_init(CURL_GLOBAL_ALL);
+	
+	/* get a curl handle */
+	curl = curl_easy_init();
+	if(curl) {
+		/* First set the URL that is about to receive our POST. This URL can
+		just as well be a https:// URL if that is what should receive the
+		data. */
+		char post_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
+		strcat(post_request, hostname);
+		strcat(post_request, "/_source");
+		curl_easy_setopt(curl, CURLOPT_URL, post_request);
+		/* Now specify the POST data */
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+	
+		/* Perform the request, res will get the return code */
+		res = curl_easy_perform(curl);
+		/* Check for errors */
+		if(res != CURLE_OK)
+		fprintf(stderr, "curl_easy_perform() failed: %s\n",
+				curl_easy_strerror(res));
+	
+		/* always cleanup */
+		curl_easy_cleanup(curl);
 	}
 	
 	FILE *fp1;
