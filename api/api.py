@@ -10,16 +10,11 @@ def resolve():
     encoded_data = input_json["data"]
     print("encoded_data")
     print(encoded_data)
-    decoded_data = base64.b64decode(encoded_data).decode("utf-8") 
+    decoded_data = base64.b64decode(encoded_data)
     print("decoded_data")
     print(decoded_data)
     print("decoded_data type")
     print(type(decoded_data))
-    bytesToSend = str.encode(decoded_data)
-    print("bytesToSend")
-    print(bytesToSend)
-    print("bytesToSend type")
-    print(type(bytesToSend))
     serverAddressPort   = ('8.8.8.8', 53)
     print("serverAddressPort")
     print(serverAddressPort)
@@ -30,17 +25,17 @@ def resolve():
     UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
     print("UDPClientSocket")
     print(UDPClientSocket)
-    UDPClientSocket.sendto(bytesToSend, serverAddressPort)
-    print("UDPClientSocket despues del sendto")
+    UDPClientSocket.connect(serverAddressPort)
+    print("UDPClientSocket despues del connect")
     print(UDPClientSocket)
-    msgFromServer, _ = UDPClientSocket.recvfrom(bufferSize)
+    UDPClientSocket.sendall(decoded_data)
+    print("UDPClientSocket despues del sendall")
+    print(UDPClientSocket)
+    msgFromServer = UDPClientSocket.recv(bufferSize)
     print("msgFromServer")
     print(msgFromServer)
-    msgFromServer = msgFromServer[0]
-    print("msgFromServer despues de sacar el indice 0")
-    print(msgFromServer)
 
-    encoded_answer = base64.b64encode(msgFromServer).decode("utf-8")
+    encoded_answer = base64.b64encode(msgFromServer)
     print("encoded_answer")
     print(encoded_answer)
     dictToReturn = {'answer': encoded_answer}
@@ -50,4 +45,4 @@ def resolve():
     return jsonify(dictToReturn)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='172.19.0.3', port=443)
+    app.run(debug=True, host='0.0.0.0', port=443)
