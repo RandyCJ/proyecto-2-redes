@@ -21,33 +21,29 @@ services:
       ports:
         - 443:443
 
-#   elasticsearch:
-#     container_name: elasticsearch
-#     build:
-#       context: ./elasticsearch
-#     restart: always
-#     environment:
-#       node.name: "es01"
-#       cluster.name: es-docker-cluster
-#       cluster.initial_master_nodes: "es01"
-#       bootstrap.memory_lock: "true"
-#       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-#     ulimits:
-#       memlock:
-#         soft: -1
-#         hard: -1
-#     volumes:
-#       - ./data01:/usr/share/elasticsearch/data
-#     ports:
-#       - 9200:9200
-#     networks:
-#       elasticsearch_network:
-#         aliases:
-#           - elasticsearch_host
-
-# volumes:
-#   data01: {}
-
+  elasticsearch:
+    container_name: elasticsearch
+    build:
+      context: ./elasticsearch
+    environment:
+      - discovery.type=single-node
+    networks:
+        dns_network:
+          ipv4_address: "10.5.0.5"
+    ports:
+      - 9200:9200
+      
+  kibana:
+    container_name: kibana
+    build:
+      context: ./kibana
+    environment:
+        - ELASTICSEARCH_HOSTS=http://10.5.0.5:9200
+    networks:
+        dns_network:
+          ipv4_address: "10.5.0.4"
+    ports:
+      - 5601:5601
 
 networks:
     dns_network:
@@ -55,6 +51,3 @@ networks:
       ipam:
         config:
           - subnet: 10.5.0.0/16
-  # elasticsearch_network:
-  #   name: elasticsearch_net
-  #   driver: bridge

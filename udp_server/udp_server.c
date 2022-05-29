@@ -216,6 +216,17 @@ void *handle_request(void *t_args){
 	struct DNS_HEADER *dns = NULL;
 	dns = (struct DNS_HEADER *)(char*)((struct args*)t_args)->buf;
 	
+	for (int i = 13; i < ((struct args*)t_args)->n-5; i++)
+	{
+					
+		printf(" %i : %c : %u \n", i, ((struct args*)t_args)->buf[i], ((struct args*)t_args)->buf[i]);
+	}
+	
+	
+	
+
+	
+	
 	
 	FILE *fp1;
 	fp1 = fopen("text.txt", "w+");
