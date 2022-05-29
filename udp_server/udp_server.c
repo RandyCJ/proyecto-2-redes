@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <netinet/in.h> /* struct sockaddr_in, struct sockaddr */
 #include <netdb.h> /* struct hostent, gethostbyname */
+#include <curl/curl.h>
 
 #define BUFSIZE 1024
 
@@ -67,6 +68,10 @@ void error(char *msg)
 	perror(msg);
 	exit(1);
 }
+
+/*
+Base 64 encoding functions taken from https://nachtimwald.com/2017/11/18/base64-encode-and-decode-in-c/
+*/
 
 size_t b64_encoded_size(size_t inlen)
 {
@@ -227,12 +232,50 @@ void *handle_request(void *t_args){
 
 	if (dns->qr == 0 && dns->opcode == 0 )
 	{
-		char *file_contents = ((struct args*)t_args)->buf;
-		printf("%s\n", file_contents);
-		enc = b64_encode((const unsigned char *)file_contents, strlen(file_contents));
-		printf("encoded: '%s'\n", enc);
+		char base64[BUFSIZE] = "";
+		for (int i=0; i<((struct args*)t_args)->n; i++){
+			char char_hex[5];
+    		sprintf(char_hex, "%02x", ((struct args*)t_args)->buf[i]);
+			strcat(base64, char_hex);
+		}
+		char data[BUFSIZE] = "{\"data\":\"";
+		char *tmp;
+		tmp = base64;
 
+		enc = b64_encode((const unsigned char *)tmp, strlen(tmp));
+		printf("encoded: '%s'\n", enc);
+		strcat(data, enc);
+		strcat(data, "\"}");
+		printf("DATA: %s\n", data);
+		CURL *curl;
+		CURLcode res;
+		
+		/* In windows, this will init the winsock stuff */
+		curl_global_init(CURL_GLOBAL_ALL);
+		
+		/* get a curl handle */
+		curl = curl_easy_init();
+		if(curl) {
+			/* First set the URL that is about to receive our POST. This URL can
+			just as well be a https:// URL if that is what should receive the
+			data. */
+			curl_easy_setopt(curl, CURLOPT_URL, "10.5.0.6:443/api/dns_resolver");
+			/* Now specify the POST data */
+			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+		
+			/* Perform the request, res will get the return code */
+			res = curl_easy_perform(curl);
+			/* Check for errors */
+			if(res != CURLE_OK)
+			fprintf(stderr, "curl_easy_perform() failed: %s\n",
+					curl_easy_strerror(res));
+		
+			/* always cleanup */
+			curl_easy_cleanup(curl);
+		}
+		curl_global_cleanup();
 	}
+	else printf("Not implemented\n");
 	
 	struct hostent *hostp; /* client host info */
 	char *hostaddrp;	/* dotted decimal host addr string */
