@@ -18,6 +18,7 @@
 #include <netinet/in.h> /* struct sockaddr_in, struct sockaddr */
 #include <netdb.h> /* struct hostent, gethostbyname */
 #include <curl/curl.h>
+#include <json-c/json.h>
 
 #define BUFSIZE 1024
 
@@ -264,34 +265,34 @@ void *handle_request(void *t_args){
 
 	printf("HOSTNAME: %s\n", hostname);
 
-	CURL *curl;
-	CURLcode res;
+	// CURL *curl;
+	// CURLcode res;
 	
-	/* In windows, this will init the winsock stuff */
-	curl_global_init(CURL_GLOBAL_ALL);
+	// /* In windows, this will init the winsock stuff */
+	// curl_global_init(CURL_GLOBAL_ALL);
 	
-	/* get a curl handle */
-	curl = curl_easy_init();
-	if(curl) {
-		/* First set the URL that is about to receive our POST. This URL can
-		just as well be a https:// URL if that is what should receive the
-		data. */
-		char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
-		strcat(get_request, hostname);
-		strcat(get_request, "/_source");
-		curl_easy_setopt(curl, CURLOPT_URL, get_request);
+	// /* get a curl handle */
+	// curl = curl_easy_init();
+	// if(curl) {
+	// 	/* First set the URL that is about to receive our POST. This URL can
+	// 	just as well be a https:// URL if that is what should receive the
+	// 	data. */
+	// 	char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
+	// 	strcat(get_request, hostname);
+	// 	strcat(get_request, "/_source");
+	// 	curl_easy_setopt(curl, CURLOPT_URL, get_request);
 		
 	
-		/* Perform the request, res will get the return code */
-		res = curl_easy_perform(curl);
-		/* Check for errors */
-		if(res != CURLE_OK)
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",
-				curl_easy_strerror(res));
+	// 	/* Perform the request, res will get the return code */
+	// 	res = curl_easy_perform(curl);
+	// 	/* Check for errors */
+	// 	if(res != CURLE_OK)
+	// 	fprintf(stderr, "curl_easy_perform() failed: %s\n",
+	// 			curl_easy_strerror(res));
 	
-		/* always cleanup */
-		curl_easy_cleanup(curl);
-	}
+	// 	/* always cleanup */
+	// 	curl_easy_cleanup(curl);
+	// }
 	
 	FILE *fp1;
 	fp1 = fopen("text.txt", "w+");
@@ -325,6 +326,8 @@ void *handle_request(void *t_args){
 
 		/* get a curl handle */
 		curl = curl_easy_init();
+		struct json_object *parsed_json;
+		struct json_object *answer;
 		if(curl) {
 			/* First set the URL that is about to receive our POST. This URL can
 			just as well be a https:// URL if that is what should receive the
@@ -340,7 +343,15 @@ void *handle_request(void *t_args){
 			curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
 			/* Perform the request, res will get the return code */
 			res = curl_easy_perform(curl);
+			
 			printf("ACAAA: %s\n", s.ptr);
+
+			
+
+			parsed_json = json_tokener_parse(s.ptr);
+			json_object_object_get_ex(parsed_json, "answer", &answer);
+			printf("ANSWER: %s\n", json_object_get_string(answer));
+
 			free(s.ptr);
 			
 			/* Check for errors */
@@ -355,16 +366,15 @@ void *handle_request(void *t_args){
 		curl_global_cleanup();
     	
 		
-		out_len = b64_decoded_size(enc);
+		out_len = b64_decoded_size(json_object_get_string(answer));
 		out = malloc(out_len);
-		b64_decode(enc, (unsigned char *)out, out_len);
+		b64_decode(json_object_get_string(answer), (unsigned char *)out, out_len);
 
 		for (int i = 0; i < out_len; i++)
 		{
 			printf("dec:     '%x'\n", out[i]);
 		}
 
-		free(out);
 	}
 	else printf("Not implemented\n");
 	
@@ -385,12 +395,15 @@ void *handle_request(void *t_args){
 	/* 
 		* sendto: echo the input back to the client 
 	*/
-	int n = sendto(((struct args*)t_args)->socket, ((struct args*)t_args)->buf, ((struct args*)t_args)->n, 0,
-			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
+	// int n = sendto(((struct args*)t_args)->socket, ((struct args*)t_args)->buf, ((struct args*)t_args)->n, 0,
+	// 		(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
 	
+	int n = sendto(((struct args*)t_args)->socket, out, out_len, 0,
+			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
 
 	if (n < 0)
 		error("ERROR in sendto");
+	free(out);
 }
 
 int main()
@@ -462,28 +475,29 @@ int main()
 		thread_args->socket = sockfd;
 		thread_args->client_len = clientlen;
 
-	
-		if (pthread_create(&threads[i], NULL, handle_request, (void *) thread_args) != 0){
-			printf("Failed to create thread\n");
-		}
-		i++;
+		handle_request((void *) thread_args);
 
-		if (i >= 15) {
-            // Update i
-            i = 0;
+		// if (pthread_create(&threads[i], NULL, handle_request, (void *) thread_args) != 0){
+		// 	printf("Failed to create thread\n");
+		// }
+		// i++;
+
+		// if (i >= 15) {
+        //     // Update i
+        //     i = 0;
  
-            while (i < 15) {
-                // Suspend execution of
-                // the calling thread
-                // until the target
-                // thread terminates
-                pthread_join(threads[i++],
-                             NULL);
-            }
+        //     while (i < 15) {
+        //         // Suspend execution of
+        //         // the calling thread
+        //         // until the target
+        //         // thread terminates
+        //         pthread_join(threads[i++],
+        //                      NULL);
+        //     }
  
-            // Update i
-            i = 0;
-        }
+        //     // Update i
+        //     i = 0;
+        // }
 
 	}
 }
