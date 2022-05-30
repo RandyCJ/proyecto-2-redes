@@ -22,16 +22,6 @@
 
 #define BUFSIZE 1024
 
-const char b64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-int b64invs[] = { 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58,
-	59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5,
-	6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-	21, 22, 23, 24, 25, -1, -1, -1, -1, -1, -1, 26, 27, 28,
-	29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
-	43, 44, 45, 46, 47, 48, 49, 50, 51 };
-
-
 struct DNS_HEADER
 {
     unsigned short id; // identification number
@@ -104,6 +94,17 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 /*
 Base 64 encoding functions taken from https://nachtimwald.com/2017/11/18/base64-encode-and-decode-in-c/
 */
+
+const char b64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+int b64invs[] = { 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58,
+	59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5,
+	6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+	21, 22, 23, 24, 25, -1, -1, -1, -1, -1, -1, 26, 27, 28,
+	29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+	43, 44, 45, 46, 47, 48, 49, 50, 51 };
+
+
 
 size_t b64_encoded_size(size_t inlen)
 {
@@ -265,47 +266,58 @@ void *handle_request(void *t_args){
 
 	printf("HOSTNAME: %s\n", hostname);
 
-	// CURL *curl;
-	// CURLcode res;
+	CURL *curl;
+	CURLcode res;
 	
-	// /* In windows, this will init the winsock stuff */
-	// curl_global_init(CURL_GLOBAL_ALL);
-	
-	// /* get a curl handle */
-	// curl = curl_easy_init();
-	// if(curl) {
-	// 	/* First set the URL that is about to receive our POST. This URL can
-	// 	just as well be a https:// URL if that is what should receive the
-	// 	data. */
-	// 	char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
-	// 	strcat(get_request, hostname);
-	// 	strcat(get_request, "/_source");
-	// 	curl_easy_setopt(curl, CURLOPT_URL, get_request);
-		
-	
-	// 	/* Perform the request, res will get the return code */
-	// 	res = curl_easy_perform(curl);
-	// 	/* Check for errors */
-	// 	if(res != CURLE_OK)
-	// 	fprintf(stderr, "curl_easy_perform() failed: %s\n",
-	// 			curl_easy_strerror(res));
-	
-	// 	/* always cleanup */
-	// 	curl_easy_cleanup(curl);
-	// }
-	
-	FILE *fp1;
-	fp1 = fopen("text.txt", "w+");
 
-	if (!fp1) {
+	struct json_object *parsed_json;
+	struct json_object *ip;
+	/* In windows, this will init the winsock stuff */
+	curl_global_init(CURL_GLOBAL_ALL);
+	
+	 /* get a curl handle */
+	curl = curl_easy_init();
+	if(curl) {
+		struct string elastic;
+		init_string(&elastic);
+		/* First set the URL that is about to receive our POST. This URL can
+		just as well be a https:// URL if that is what should receive the
+		data. */
+		char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
+		strcat(get_request, hostname);
+		strcat(get_request, "/_source");
+		curl_easy_setopt(curl, CURLOPT_URL, get_request);
+
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &elastic);
+		/* Perform the request, res will get the return code */
+		res = curl_easy_perform(curl);
+
+		parsed_json = json_tokener_parse(elastic.ptr);
+		json_object_object_get_ex(parsed_json, "IP", &ip);
+		printf("IP: %s\n", json_object_get_string(ip));
+
+		/* Check for errors */
+		if(res != CURLE_OK)
+		fprintf(stderr, "curl_easy_perform() failed: %s\n",
+				curl_easy_strerror(res));
+		/* always cleanup */
+		curl_easy_cleanup(curl);
+	}
+	
+	FILE *fp2;
+	FILE *fp1;
+	fp2 = fopen("text2.txt", "w+");
+
+	if (!fp2) {
         printf("Unable to open/"
                "detect file(s)\n");
         return NULL;
     }
 	
-	fwrite(((struct args*)t_args)->buf, 1, ((struct args*)t_args)->n, fp1);
+	fwrite(((struct args*)t_args)->buf, 1, ((struct args*)t_args)->n, fp2);
 	
-	fclose(fp1);
+	fclose(fp2);
 
 	if (dns->qr == 0 && dns->opcode == 0 )
 	{
@@ -369,12 +381,23 @@ void *handle_request(void *t_args){
 		out_len = b64_decoded_size(json_object_get_string(answer));
 		out = malloc(out_len);
 		b64_decode(json_object_get_string(answer), (unsigned char *)out, out_len);
+		
+		//for (int i = 0; i < out_len; i++)
+		//{
+		//	printf("dec: %x : %u : %c \n", out[i], out[i], out[i]);
+		//}
+		
+		fp1 = fopen("text.txt", "w+");
 
-		for (int i = 0; i < out_len; i++)
-		{
-			printf("dec:     '%x'\n", out[i]);
+		if (!fp1) {
+			printf("Unable to open/"
+					"detect file(s)\n");
+			return NULL;
 		}
 
+		fwrite(out, 1, out_len, fp1);
+
+		fclose(fp1);
 	}
 	else printf("Not implemented\n");
 	
@@ -400,10 +423,10 @@ void *handle_request(void *t_args){
 	
 	int n = sendto(((struct args*)t_args)->socket, out, out_len, 0,
 			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
-
+	free(out);
 	if (n < 0)
 		error("ERROR in sendto");
-	free(out);
+	
 }
 
 int main()
@@ -475,29 +498,26 @@ int main()
 		thread_args->socket = sockfd;
 		thread_args->client_len = clientlen;
 
-		handle_request((void *) thread_args);
+		//handle_request((void *) thread_args);
 
-		// if (pthread_create(&threads[i], NULL, handle_request, (void *) thread_args) != 0){
-		// 	printf("Failed to create thread\n");
-		// }
-		// i++;
-
-		// if (i >= 15) {
-        //     // Update i
-        //     i = 0;
- 
-        //     while (i < 15) {
-        //         // Suspend execution of
-        //         // the calling thread
-        //         // until the target
-        //         // thread terminates
-        //         pthread_join(threads[i++],
-        //                      NULL);
-        //     }
- 
-        //     // Update i
-        //     i = 0;
-        // }
+		if (pthread_create(&threads[i], NULL, handle_request, (void *) thread_args) != 0){
+		printf("Failed to create thread\n");
+		}
+		 i++;
+		if (i >= 15) {
+				// Update i
+				i = 0;
+				while (i < 15) {
+					// Suspend execution of
+					// the calling thread
+					// until the target
+					// thread terminates
+					pthread_join(threads[i++],
+								NULL);
+				}
+				// Update i
+				i = 0;
+			}
 
 	}
 }

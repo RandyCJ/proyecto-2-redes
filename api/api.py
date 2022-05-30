@@ -21,7 +21,7 @@ def resolve():
 
         decoded_data = base64.b64decode(encoded_data)
         serverAddressPort = (remote_dns, port)
-        bufferSize = len(decoded_data)
+        bufferSize = 1024
 
         UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         UDPClientSocket.connect(serverAddressPort)
