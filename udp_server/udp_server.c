@@ -238,6 +238,18 @@ int b64_decode(const char *in, unsigned char *out, size_t outlen)
 	return 1;
 }
 
+unsigned int dotted_decimal_to_int(char ip[]){
+ 
+    // char is exactly 1 byte
+    unsigned char bytes[4] = {0};
+    
+    sscanf(ip, "%hhd.%hhd.%hhd.%hhd", &bytes[3], &bytes[2], &bytes[1], &bytes[0]);
+    
+    // set 1 byte at a time by left shifting (<<) and ORing (|)
+    return bytes[0] | bytes[1] << 8 | bytes[2] << 16 | bytes[3] << 24;
+
+}
+
 void *handle_request(void *t_args){
 	
 	char *data;
@@ -245,6 +257,19 @@ void *handle_request(void *t_args){
 	unsigned char       *out;
 	size_t      out_len;
 	
+	FILE *fp3;
+	fp3 = fopen("h1.txt", "w+");
+
+	if (!fp3) {
+        printf("Unable to open/"
+               "detect file(s)\n");
+        return NULL;
+    }
+	
+	fwrite(((struct args*)t_args)->buf, 1, ((struct args*)t_args)->n, fp3);
+	
+	fclose(fp3);
+
 	struct DNS_HEADER *dns = NULL;
 	dns = (struct DNS_HEADER *)(char*)((struct args*)t_args)->buf;
 	
@@ -252,8 +277,14 @@ void *handle_request(void *t_args){
 	char char_tmp[2];
 	int start = 12;
 	int amount = (int)((struct args*)t_args)->buf[start];
-	//i < start + amount
+	unsigned char binary_hostname[BUFSIZE];
+
+	binary_hostname[0] = ((struct args*)t_args)->buf[start];
+	int j = 1;
+
 	for (int i = start+1; ((struct args*)t_args)->buf[i] != 0; i++){
+		binary_hostname[j] = ((struct args*)t_args)->buf[i];
+		j++;
 		if (i == start + amount + 1){
 			start = start + amount + 1;
 			amount = (int)((struct args*)t_args)->buf[i];
@@ -270,44 +301,88 @@ void *handle_request(void *t_args){
 	CURLcode res;
 	
 
-	struct json_object *parsed_json;
-	struct json_object *ip;
-	/* In windows, this will init the winsock stuff */
-	curl_global_init(CURL_GLOBAL_ALL);
+	// struct json_object *parsed_json;
+	// struct json_object *ip;
+	// /* In windows, this will init the winsock stuff */
+	// curl_global_init(CURL_GLOBAL_ALL);
 	
-	 /* get a curl handle */
-	curl = curl_easy_init();
-	if(curl) {
-		struct string elastic;
-		init_string(&elastic);
-		/* First set the URL that is about to receive our POST. This URL can
-		just as well be a https:// URL if that is what should receive the
-		data. */
-		char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
-		strcat(get_request, hostname);
-		strcat(get_request, "/_source");
-		curl_easy_setopt(curl, CURLOPT_URL, get_request);
+	//  /* get a curl handle */
+	// curl = curl_easy_init();
+	// if(curl) {
+	// 	struct string elastic;
+	// 	init_string(&elastic);
+	// 	/* First set the URL that is about to receive our POST. This URL can
+	// 	just as well be a https:// URL if that is what should receive the
+	// 	data. */
+	// 	char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
+	// 	strcat(get_request, hostname);
+	// 	strcat(get_request, "/_source");
+	// 	curl_easy_setopt(curl, CURLOPT_URL, get_request);
 
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &elastic);
-		/* Perform the request, res will get the return code */
-		res = curl_easy_perform(curl);
+	// 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+	// 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &elastic);
+	// 	/* Perform the request, res will get the return code */
+	// 	res = curl_easy_perform(curl);
 
-		parsed_json = json_tokener_parse(elastic.ptr);
-		json_object_object_get_ex(parsed_json, "IP", &ip);
-		printf("IP: %s\n", json_object_get_string(ip));
+	// 	parsed_json = json_tokener_parse(elastic.ptr);
+	// 	json_object_object_get_ex(parsed_json, "IP", &ip);
+	//  char *tmp_ip = json_object_get_string(ip);
+	// 	printf("IP: %s\n", tmp_ip);
+	char *tmp_ip = "182.31.1.43";
+	unsigned int elastic_ip_address = dotted_decimal_to_int(tmp_ip);
 
-		/* Check for errors */
-		if(res != CURLE_OK)
-		fprintf(stderr, "curl_easy_perform() failed: %s\n",
-				curl_easy_strerror(res));
-		/* always cleanup */
-		curl_easy_cleanup(curl);
+	// 	/* Check for errors */
+	// 	if(res != CURLE_OK)
+	// 	fprintf(stderr, "curl_easy_perform() failed: %s\n",
+	// 			curl_easy_strerror(res));
+	// 	/* always cleanup */
+	// 	curl_easy_cleanup(curl);
+	// }
+
+	unsigned char response_query[BUFSIZE];
+	memcpy(response_query, ((struct args*)t_args)->buf, ((struct args*)t_args)->n);
+
+	response_query[2] = 129;
+	response_query[3] = 128;
+	response_query[7] = 1;
+
+	int count = ((struct args*)t_args)->n;
+
+	// NAME
+	for (int i = 0; i < strlen(binary_hostname); i++)
+	{
+		response_query[count] = binary_hostname[i];
+		count++;
 	}
+	response_query[count++] = 0;
+
+	// TYPE (A) = ipv4 address
+	response_query[count++] = 0;
+	response_query[count++] = 1;
+	// CLASS (IN) = Internet
+	response_query[count++] = 0;
+	response_query[count++] = 1;
+	// TTL (colocar TTL de elastic search, o no?)
+	response_query[count++] = 0;
+	response_query[count++] = 0;
+	response_query[count++] = 0;
+	response_query[count++] = 5;
+	// RDLENGTH
+	response_query[count++] = 0;
+	response_query[count++] = 4;
+	// RDATA 
+	response_query[count++] = elastic_ip_address >> 24;
+	response_query[count++] = elastic_ip_address >> 16;
+	response_query[count++] = elastic_ip_address >> 8;
+	response_query[count++] = elastic_ip_address;
+	response_query[count] = 0;
+		
+	int n = sendto(((struct args*)t_args)->socket, response_query, count, 0,
+			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
 	
 	FILE *fp2;
 	FILE *fp1;
-	fp2 = fopen("text2.txt", "w+");
+	fp2 = fopen("qr1.txt", "w+");
 
 	if (!fp2) {
         printf("Unable to open/"
@@ -315,8 +390,7 @@ void *handle_request(void *t_args){
         return NULL;
     }
 	
-	fwrite(((struct args*)t_args)->buf, 1, ((struct args*)t_args)->n, fp2);
-	
+	fwrite(response_query, 1, count, fp2);
 	fclose(fp2);
 
 	if (dns->qr == 0 && dns->opcode == 0 )
@@ -324,11 +398,8 @@ void *handle_request(void *t_args){
 		char data[BUFSIZE] = "{\"dns\": \"8.8.8.8\", \"port\": 53, \"data\":\"";
 
 		enc = b64_encode((const unsigned char *)((struct args*)t_args)->buf, ((struct args*)t_args)->n);
-		printf("encoded: '%s'\n", enc);
 		strcat(data, enc);
 		strcat(data, "\"}");
-		printf("DATA: %s\n", data);
-		
 		
 		CURL *curl;
 		CURLcode res;
@@ -346,23 +417,16 @@ void *handle_request(void *t_args){
 			data. */
 			struct string s;
 			init_string(&s);
-			curl_easy_setopt(curl, CURLOPT_URL, "10.5.0.6:443/api/dns_resolver");
+			curl_easy_setopt(curl, CURLOPT_URL, "http://10.5.0.6:443/api/dns_resolver");
 			/* Now specify the POST data */
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-			
-
 			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
 			curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+
 			/* Perform the request, res will get the return code */
 			res = curl_easy_perform(curl);
-			
-			printf("ACAAA: %s\n", s.ptr);
-
-			
-
 			parsed_json = json_tokener_parse(s.ptr);
 			json_object_object_get_ex(parsed_json, "answer", &answer);
-			printf("ANSWER: %s\n", json_object_get_string(answer));
 
 			free(s.ptr);
 			
@@ -382,12 +446,7 @@ void *handle_request(void *t_args){
 		out = malloc(out_len);
 		b64_decode(json_object_get_string(answer), (unsigned char *)out, out_len);
 		
-		//for (int i = 0; i < out_len; i++)
-		//{
-		//	printf("dec: %x : %u : %c \n", out[i], out[i], out[i]);
-		//}
-		
-		fp1 = fopen("text.txt", "w+");
+		fp1 = fopen("r1.txt", "w+");
 
 		if (!fp1) {
 			printf("Unable to open/"
@@ -421,11 +480,11 @@ void *handle_request(void *t_args){
 	// int n = sendto(((struct args*)t_args)->socket, ((struct args*)t_args)->buf, ((struct args*)t_args)->n, 0,
 	// 		(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
 	
-	int n = sendto(((struct args*)t_args)->socket, out, out_len, 0,
-			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
+	// int n2 = sendto(((struct args*)t_args)->socket, out, out_len, 0,
+	// 		(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
+	// if (n2 < 0)
+	// 	error("ERROR in sendto");
 	free(out);
-	if (n < 0)
-		error("ERROR in sendto");
 	
 }
 
