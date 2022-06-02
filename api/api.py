@@ -16,6 +16,10 @@ def resolve():
         input_json = request.get_json(force=True)
 
         encoded_data = input_json["data"]
+
+        if encoded_data == "":
+            return jsonify({'answer': 'Wrong data sent'})
+
         remote_dns = input_json["dns"]
         port = input_json["port"]
 
@@ -26,6 +30,7 @@ def resolve():
         UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
         UDPClientSocket.connect(serverAddressPort)
         UDPClientSocket.sendall(decoded_data)
+
         msgFromServer = UDPClientSocket.recv(bufferSize)
 
         encoded_answer = base64.b64encode(msgFromServer)

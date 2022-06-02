@@ -19,6 +19,7 @@
 #include <netdb.h> /* struct hostent, gethostbyname */
 #include <curl/curl.h>
 #include <json-c/json.h>
+#include <regex.h>
 
 #define BUFSIZE 1024
 
@@ -295,149 +296,222 @@ void *handle_request(void *t_args){
 		strcat(hostname, char_tmp);
 	}
 
-	printf("HOSTNAME: %s\n", hostname);
-
 	CURL *curl;
 	CURLcode res;
 	
 
-	// struct json_object *parsed_json;
-	// struct json_object *ip;
-	// /* In windows, this will init the winsock stuff */
-	// curl_global_init(CURL_GLOBAL_ALL);
+	 struct json_object *parsed_json;
+	 struct json_object *ip;
+	 struct json_object *index;
+	 /* In windows, this will init the winsock stuff */
+	 curl_global_init(CURL_GLOBAL_ALL);
+	  /* get a curl handle */
+	curl = curl_easy_init();
+	char *tmp_ip = "";
+	int flag = 0;
+	char elastic_ptr[BUFSIZE];
+	unsigned int elastic_ip_address;
 	
-	//  /* get a curl handle */
-	// curl = curl_easy_init();
-	// if(curl) {
-	// 	struct string elastic;
-	// 	init_string(&elastic);
-	// 	/* First set the URL that is about to receive our POST. This URL can
-	// 	just as well be a https:// URL if that is what should receive the
-	// 	data. */
-	// 	char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
-	// 	strcat(get_request, hostname);
-	// 	strcat(get_request, "/_source");
-	// 	curl_easy_setopt(curl, CURLOPT_URL, get_request);
-
-	// 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-	// 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &elastic);
-	// 	/* Perform the request, res will get the return code */
-	// 	res = curl_easy_perform(curl);
-
-	// 	parsed_json = json_tokener_parse(elastic.ptr);
-	// 	json_object_object_get_ex(parsed_json, "IP", &ip);
-	//  char *tmp_ip = json_object_get_string(ip);
-	// 	printf("IP: %s\n", tmp_ip);
-	char *tmp_ip = "182.31.1.43";
-	unsigned int elastic_ip_address = dotted_decimal_to_int(tmp_ip);
-
-	// 	/* Check for errors */
-	// 	if(res != CURLE_OK)
-	// 	fprintf(stderr, "curl_easy_perform() failed: %s\n",
-	// 			curl_easy_strerror(res));
-	// 	/* always cleanup */
-	// 	curl_easy_cleanup(curl);
-	// }
-
-	unsigned char response_query[BUFSIZE];
-	memcpy(response_query, ((struct args*)t_args)->buf, ((struct args*)t_args)->n);
-
-	response_query[2] = 129;
-	response_query[3] = 128;
-	response_query[7] = 1;
-
-	int count = ((struct args*)t_args)->n;
-
-	// NAME
-	for (int i = 0; i < strlen(binary_hostname); i++)
-	{
-		response_query[count] = binary_hostname[i];
-		count++;
-	}
-	response_query[count++] = 0;
-
-	// TYPE (A) = ipv4 address
-	response_query[count++] = 0;
-	response_query[count++] = 1;
-	// CLASS (IN) = Internet
-	response_query[count++] = 0;
-	response_query[count++] = 1;
-	// TTL (colocar TTL de elastic search, o no?)
-	response_query[count++] = 0;
-	response_query[count++] = 0;
-	response_query[count++] = 0;
-	response_query[count++] = 5;
-	// RDLENGTH
-	response_query[count++] = 0;
-	response_query[count++] = 4;
-	// RDATA 
-	response_query[count++] = elastic_ip_address >> 24;
-	response_query[count++] = elastic_ip_address >> 16;
-	response_query[count++] = elastic_ip_address >> 8;
-	response_query[count++] = elastic_ip_address;
-	response_query[count] = 0;
+	if(curl) {
+	 	struct string elastic;
+	 	init_string(&elastic);
+	 	/* First set the URL that is about to receive our POST. This URL can
+	 	just as well be a https:// URL if that is what should receive the
+	 	data. */
+	 	char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
+	 	strcat(get_request, hostname);
+	 	strcat(get_request, "/_source");
+	 	curl_easy_setopt(curl, CURLOPT_URL, get_request);
+	 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+	 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &elastic);
+	 	/* Perform the request, res will get the return code */
+	 	res = curl_easy_perform(curl);
+	 	
+		 
+		regex_t reegex;
 		
-	int n = sendto(((struct args*)t_args)->socket, response_query, count, 0,
-			(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
-	
-	FILE *fp2;
-	FILE *fp1;
-	fp2 = fopen("qr1.txt", "w+");
+    	int ip_found = regcomp( &reegex, "[0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9]", REG_EXTENDED);
+    	strcpy(elastic_ptr,elastic.ptr);
+		ip_found = regexec( &reegex, elastic_ptr, 0, NULL, 0); 
+		parsed_json = json_tokener_parse(elastic.ptr);
+		
+		if (ip_found == 0 )
+		{
+			
+			unsigned int tmp_int_ips[BUFSIZE];
+			int tmp_index;
+			flag = 0;
+			json_object_object_get_ex(parsed_json, "IP", &ip);
+			tmp_ip = json_object_get_string(ip);
+			char *token = strtok(tmp_ip, ",");
+			tmp_int_ips[0] = dotted_decimal_to_int(token);
+			int count = 1;
 
-	if (!fp2) {
-        printf("Unable to open/"
-               "detect file(s)\n");
-        return NULL;
-    }
+			while (token != NULL)
+			{
+				token = strtok(NULL, ",");
+				if (token == NULL)
+				{
+					count ++;
+					break;
+				}
+				tmp_int_ips[count] = dotted_decimal_to_int(token);
+				count ++;
+			}
+			
+			
+			json_object_object_get_ex(parsed_json, "index", &index);
+			tmp_index = atoi(json_object_get_string(index));
+			
+			if (tmp_index > count-2 )
+			{
+				tmp_index = 0;
+			}
+			
+			CURL *curl;
+			CURLcode res;
+			
+			/* In windows, this will init the winsock stuff */
+			curl_global_init(CURL_GLOBAL_ALL);
+
+			/* get a curl handle */
+			curl = curl_easy_init();
 	
-	fwrite(response_query, 1, count, fp2);
-	fclose(fp2);
+			if(curl) {
+				/* First set the URL that is about to receive our POST. This URL can
+				just as well be a https:// URL if that is what should receive the
+				data. */
+
+				struct curl_slist *list = NULL;
+				list = curl_slist_append(list, "Content-Type: application/json");
+
+				char json_update[BUFSIZE] = "{\"doc\": {\"index\": ";
+				char index_str[BUFSIZE];
+				sprintf(index_str,"%d",tmp_index+1);
+				strcat(json_update, index_str );
+				strcat(json_update, " } }");
+				char update_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
+				strcat(update_request, hostname);
+	 			strcat(update_request, "/_update");
+				
+				curl_easy_setopt(curl, CURLOPT_URL, update_request);
+				
+				/* Now specify the POST data */
+				curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_update);
+				curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+				
+				/* Perform the request, res will get the return code */
+				res = curl_easy_perform(curl);
+	
+				/* Check for errors */
+				if(res != CURLE_OK)
+				fprintf(stderr, "curl_easy_perform() failed: %s\n",
+						curl_easy_strerror(res));
+				
+
+				/* always cleanup */
+				curl_easy_cleanup(curl);
+				curl_slist_free_all(list); /* free the list again */
+			}
+			elastic_ip_address = tmp_int_ips[tmp_index];
+		}
+		else{
+			
+			flag = 1;
+		}
+	}
+
+	if (flag == 0)
+	{
+		unsigned char response_query[BUFSIZE];
+		memcpy(response_query, ((struct args*)t_args)->buf, ((struct args*)t_args)->n);
+
+		response_query[2] = 129;
+		response_query[3] = 128;
+		response_query[7] = 1;
+
+		int count = ((struct args*)t_args)->n;
+
+		// NAME
+		for (int i = 0; i < strlen(binary_hostname); i++)
+		{
+			response_query[count] = binary_hostname[i];
+			count++;
+		}
+		response_query[count++] = 0;
+
+		// TYPE (A) = ipv4 address
+		response_query[count++] = 0;
+		response_query[count++] = 1;
+		// CLASS (IN) = Internet
+		response_query[count++] = 0;
+		response_query[count++] = 1;
+		// TTL (colocar TTL de elastic search, o no?)
+		response_query[count++] = 0;
+		response_query[count++] = 0;
+		response_query[count++] = 0;
+		response_query[count++] = 5;
+		// RDLENGTH
+		response_query[count++] = 0;
+		response_query[count++] = 4;
+		// RDATA 
+		response_query[count++] = elastic_ip_address >> 24;
+		response_query[count++] = elastic_ip_address >> 16;
+		response_query[count++] = elastic_ip_address >> 8;
+		response_query[count++] = elastic_ip_address;
+		response_query[count] = 0;
+			
+		int n = sendto(((struct args*)t_args)->socket, response_query, count, 0,
+				(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
+		return NULL;
+	}
+
 
 	if (dns->qr == 0 && dns->opcode == 0 )
 	{
+
 		char data[BUFSIZE] = "{\"dns\": \"8.8.8.8\", \"port\": 53, \"data\":\"";
 
 		enc = b64_encode((const unsigned char *)((struct args*)t_args)->buf, ((struct args*)t_args)->n);
 		strcat(data, enc);
 		strcat(data, "\"}");
-		
-		CURL *curl;
-		CURLcode res;
+		CURL *curl2;
+		CURLcode res2;
 		
 		/* In windows, this will init the winsock stuff */
 		curl_global_init(CURL_GLOBAL_ALL);
 
 		/* get a curl handle */
-		curl = curl_easy_init();
+		curl2 = curl_easy_init();
 		struct json_object *parsed_json;
 		struct json_object *answer;
-		if(curl) {
+		if(curl2) {
 			/* First set the URL that is about to receive our POST. This URL can
 			just as well be a https:// URL if that is what should receive the
 			data. */
 			struct string s;
 			init_string(&s);
-			curl_easy_setopt(curl, CURLOPT_URL, "http://10.5.0.6:443/api/dns_resolver");
+			curl_easy_setopt(curl2, CURLOPT_URL, "http://10.5.0.6:443/api/dns_resolver");
 			/* Now specify the POST data */
-			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-			curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+			curl_easy_setopt(curl2, CURLOPT_POSTFIELDS, data);
+			curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+			curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &s);
 
 			/* Perform the request, res will get the return code */
-			res = curl_easy_perform(curl);
+			res2 = curl_easy_perform(curl2);
 			parsed_json = json_tokener_parse(s.ptr);
 			json_object_object_get_ex(parsed_json, "answer", &answer);
 
 			free(s.ptr);
 			
 			/* Check for errors */
-			if(res != CURLE_OK)
+			if(res2 != CURLE_OK)
 			fprintf(stderr, "curl_easy_perform() failed: %s\n",
-					curl_easy_strerror(res));
+					curl_easy_strerror(res2));
 			
 
 			/* always cleanup */
-			curl_easy_cleanup(curl);
+			curl_easy_cleanup(curl2);
 		}
 		curl_global_cleanup();
     	
@@ -446,6 +520,7 @@ void *handle_request(void *t_args){
 		out = malloc(out_len);
 		b64_decode(json_object_get_string(answer), (unsigned char *)out, out_len);
 		
+		FILE *fp1;
 		fp1 = fopen("r1.txt", "w+");
 
 		if (!fp1) {
@@ -472,18 +547,14 @@ void *handle_request(void *t_args){
 	if (hostaddrp == NULL)
 		error("ERROR on inet_ntoa\n");
 	
-	//printf("server received %d bytes\n", ((struct args*)t_args)->n);
 
 	/* 
 		* sendto: echo the input back to the client 
 	*/
-	// int n = sendto(((struct args*)t_args)->socket, ((struct args*)t_args)->buf, ((struct args*)t_args)->n, 0,
-	// 		(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
-	
-	// int n2 = sendto(((struct args*)t_args)->socket, out, out_len, 0,
-	// 		(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
-	// if (n2 < 0)
-	// 	error("ERROR in sendto");
+	int n2 = sendto(((struct args*)t_args)->socket, out, out_len, 0,
+		(struct sockaddr *)&((struct args*)t_args)->clientaddr, ((struct args*)t_args)->client_len);
+	if (n2 < 0)
+		error("ERROR in sendto");
 	free(out);
 	
 }
