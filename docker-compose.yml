@@ -2,10 +2,10 @@ version: '3.7'
 
 services:
 
-  udp-server:
-      container_name: udp-server
+  dns-interceptor:
+      container_name: dns-interceptor
       build:
-        context: ./udp_server
+        context: ./dns_interceptor
       networks:
         dns_network:
           ipv4_address: "10.5.0.7"
