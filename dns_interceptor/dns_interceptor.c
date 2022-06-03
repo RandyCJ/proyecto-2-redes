@@ -7,36 +7,7 @@
 #include <regex.h>
 #include "dns_interceptor.h"
 #include "base64.c"
-
-struct string {
-  char *ptr;
-  size_t len;
-};
-
-void init_string(struct string *s) {
-  s->len = 0;
-  s->ptr = malloc(s->len+1);
-  if (s->ptr == NULL) {
-    fprintf(stderr, "malloc() failed\n");
-    exit(EXIT_FAILURE);
-  }
-  s->ptr[0] = '\0';
-}
-
-size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
-{
-  size_t new_len = s->len + size*nmemb;
-  s->ptr = realloc(s->ptr, new_len+1);
-  if (s->ptr == NULL) {
-    fprintf(stderr, "realloc() failed\n");
-    exit(EXIT_FAILURE);
-  }
-  memcpy(s->ptr+s->len, ptr, size*nmemb);
-  s->ptr[new_len] = '\0';
-  s->len = new_len;
-
-  return size*nmemb;
-}
+#include "http_client.c"
 
 unsigned int dotted_decimal_to_int(char ip[]){
  
@@ -93,247 +64,171 @@ void get_header_hostname(unsigned char buf[], struct hostname_rep *hostname_stru
 	memcpy(hostname_struct->header_hostname, binary_hostname, j);
 }
 
+void get_elastic_ip_and_index(struct elastic_data *elstc_data, char *elastic_ips){
+	struct json_object *parsed_json;
+	struct json_object *ip;
+	char *tmp_ip = "";
+		
+	parsed_json = json_tokener_parse(elastic_ips);
+	
+	unsigned int tmp_int_ips[BUFSIZE];
+	int tmp_index;
+	json_object_object_get_ex(parsed_json, "IP", &ip);
+	tmp_ip = json_object_get_string(ip);
+	char *token = strtok(tmp_ip, ",");
+	tmp_int_ips[0] = dotted_decimal_to_int(token);
+	int count = 1;
+
+	while (token != NULL)
+	{
+		token = strtok(NULL, ",");
+		if (token == NULL)
+		{
+			count ++;
+			break;
+		}
+		tmp_int_ips[count] = dotted_decimal_to_int(token);
+		count ++;
+	}
+	
+	struct json_object *index;
+	json_object_object_get_ex(parsed_json, "index", &index);
+	tmp_index = atoi(json_object_get_string(index));
+	
+	if (tmp_index > count-2 )
+	{
+		tmp_index = 0;
+	}
+	elstc_data->ip = tmp_int_ips[tmp_index];
+	elstc_data->index = tmp_index;
+}
+
+void build_dns_response(unsigned char response_query[], int count, unsigned char hostname[], 
+						unsigned int elastic_ip_address, struct response_data *response){
+	response_query[2] = 129;
+	response_query[3] = 128;
+	response_query[7] = 1;
+
+	// int count = read_bytes;
+
+	// NAME
+	for (int i = 0; i < strlen(hostname); i++)
+	{
+		response_query[count] = hostname[i];
+		count++;
+	}
+	response_query[count++] = 0;
+
+	// TYPE (A) = ipv4 address
+	response_query[count++] = 0;
+	response_query[count++] = 1;
+	// CLASS (IN) = Internet
+	response_query[count++] = 0;
+	response_query[count++] = 1;
+	// TTL (colocar TTL de elastic search, o no?)
+	response_query[count++] = 0;
+	response_query[count++] = 0;
+	response_query[count++] = 0;
+	response_query[count++] = 5;
+	// RDLENGTH
+	response_query[count++] = 0;
+	response_query[count++] = 4;
+	// RDATA 
+	response_query[count++] = elastic_ip_address >> 24;
+	response_query[count++] = elastic_ip_address >> 16;
+	response_query[count++] = elastic_ip_address >> 8;
+	response_query[count++] = elastic_ip_address;
+	response_query[count] = 0;
+		
+	memcpy(response->response, response_query, count);
+	response->bytes_response = count;
+}
+
 void *get_response(unsigned char buf[BUFSIZE], int read_bytes, struct response_data *response){
 	
 	write_file("h1.txt", buf, read_bytes);
 
+	// Get hostname from buffer
 	struct hostname_rep hostname;
 	get_header_hostname(buf, &hostname);
 
-	CURL *curl;
-	CURLcode res;
-	
+	// ElasticSearch hostname request
+	struct string elastic;
+	char get_request[BUFSIZE] = ELASTIC_API;
+	strcat(get_request, hostname.ascii_hostname);
+	strcat(get_request, "/_source");
+	request_response(&elastic, get_request, "", 1);
 
-	struct json_object *parsed_json;
-	struct json_object *ip;
-	struct json_object *index;
-	/* In windows, this will init the winsock stuff */
-	curl_global_init(CURL_GLOBAL_ALL);
-	/* get a curl handle */
-	curl = curl_easy_init();
-	char *tmp_ip = "";
-	int flag = 0;
+	// Check if hostname exist with valid IPs
 	char elastic_ptr[BUFSIZE];
-	unsigned int elastic_ip_address;
-	
-	if(curl) {
-	 	struct string elastic;
-	 	init_string(&elastic);
-	 	/* First set the URL that is about to receive our POST. This URL can
-	 	just as well be a https:// URL if that is what should receive the
-	 	data. */
-	 	char get_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
-	 	strcat(get_request, hostname.ascii_hostname);
-	 	strcat(get_request, "/_source");
-	 	curl_easy_setopt(curl, CURLOPT_URL, get_request);
-	 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-	 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &elastic);
-	 	/* Perform the request, res will get the return code */
-	 	res = curl_easy_perform(curl);
-	 	
-		 
-		regex_t reegex;
+	strcpy(elastic_ptr, elastic.ptr);
+	regex_t reegex;
+	int ip_found = regcomp( &reegex, VALID_IP_REGEX, REG_EXTENDED);
+	ip_found = regexec( &reegex, elastic_ptr, 0, NULL, 0);
+
+	if (ip_found == 0 ){ // If valid IP
+
+		// get ip and index from elastic
+		struct elastic_data elstc_data;
+		get_elastic_ip_and_index(&elstc_data, elastic.ptr);
 		
-    	int ip_found = regcomp( &reegex, "[0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9]", REG_EXTENDED);
-    	strcpy(elastic_ptr,elastic.ptr);
-		ip_found = regexec( &reegex, elastic_ptr, 0, NULL, 0); 
-		parsed_json = json_tokener_parse(elastic.ptr);
-		
-		if (ip_found == 0 )
-		{
-			
-			unsigned int tmp_int_ips[BUFSIZE];
-			int tmp_index;
-			flag = 0;
-			json_object_object_get_ex(parsed_json, "IP", &ip);
-			tmp_ip = json_object_get_string(ip);
-			char *token = strtok(tmp_ip, ",");
-			tmp_int_ips[0] = dotted_decimal_to_int(token);
-			int count = 1;
+		// update index in elastic register
+		char json_update[BUFSIZE] = "{\"doc\": {\"index\": ";
+		char index_str[BUFSIZE];
+		sprintf(index_str, "%d", elstc_data.index+1);
+		strcat(json_update, index_str );
+		strcat(json_update, " } }");
+		char update_request[BUFSIZE] = ELASTIC_API;
+		strcat(update_request, hostname.ascii_hostname);
+		strcat(update_request, "/_update");
+		request_response(&elastic, update_request, json_update, 0);
 
-			while (token != NULL)
-			{
-				token = strtok(NULL, ",");
-				if (token == NULL)
-				{
-					count ++;
-					break;
-				}
-				tmp_int_ips[count] = dotted_decimal_to_int(token);
-				count ++;
-			}
-			
-			
-			json_object_object_get_ex(parsed_json, "index", &index);
-			tmp_index = atoi(json_object_get_string(index));
-			
-			if (tmp_index > count-2 )
-			{
-				tmp_index = 0;
-			}
-			
-			CURL *curl;
-			CURLcode res;
-			
-			/* In windows, this will init the winsock stuff */
-			curl_global_init(CURL_GLOBAL_ALL);
+		// build dns response
+		build_dns_response(buf, read_bytes, hostname.header_hostname, elstc_data.ip, response);
 
-			/* get a curl handle */
-			curl = curl_easy_init();
-	
-			if(curl) {
-				/* First set the URL that is about to receive our POST. This URL can
-				just as well be a https:// URL if that is what should receive the
-				data. */
-
-				struct curl_slist *list = NULL;
-				list = curl_slist_append(list, "Content-Type: application/json");
-
-				char json_update[BUFSIZE] = "{\"doc\": {\"index\": ";
-				char index_str[BUFSIZE];
-				sprintf(index_str,"%d",tmp_index+1);
-				strcat(json_update, index_str );
-				strcat(json_update, " } }");
-				char update_request[BUFSIZE] = "10.5.0.5:9200/zones/host/";
-				strcat(update_request, hostname.ascii_hostname);
-	 			strcat(update_request, "/_update");
-				
-				curl_easy_setopt(curl, CURLOPT_URL, update_request);
-				
-				/* Now specify the POST data */
-				curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_update);
-				curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-				
-				/* Perform the request, res will get the return code */
-				res = curl_easy_perform(curl);
-	
-				/* Check for errors */
-				if(res != CURLE_OK)
-				fprintf(stderr, "curl_easy_perform() failed: %s\n",
-						curl_easy_strerror(res));
-				
-
-				/* always cleanup */
-				curl_easy_cleanup(curl);
-				curl_slist_free_all(list); /* free the list again */
-			}
-			elastic_ip_address = tmp_int_ips[tmp_index];
-		}
-		else{
-			
-			flag = 1;
-		}
-	}
-
-	if (flag == 0)
-	{
-		unsigned char response_query[BUFSIZE];
-		memcpy(response_query, buf, read_bytes);
-
-		response_query[2] = 129;
-		response_query[3] = 128;
-		response_query[7] = 1;
-
-		int count = read_bytes;
-
-		// NAME
-		for (int i = 0; i < strlen(hostname.header_hostname); i++)
-		{
-			response_query[count] = hostname.header_hostname[i];
-			count++;
-		}
-		response_query[count++] = 0;
-
-		// TYPE (A) = ipv4 address
-		response_query[count++] = 0;
-		response_query[count++] = 1;
-		// CLASS (IN) = Internet
-		response_query[count++] = 0;
-		response_query[count++] = 1;
-		// TTL (colocar TTL de elastic search, o no?)
-		response_query[count++] = 0;
-		response_query[count++] = 0;
-		response_query[count++] = 0;
-		response_query[count++] = 5;
-		// RDLENGTH
-		response_query[count++] = 0;
-		response_query[count++] = 4;
-		// RDATA 
-		response_query[count++] = elastic_ip_address >> 24;
-		response_query[count++] = elastic_ip_address >> 16;
-		response_query[count++] = elastic_ip_address >> 8;
-		response_query[count++] = elastic_ip_address;
-		response_query[count] = 0;
-			
-        memcpy(response->response, response_query, count);
-        response->bytes_response = count;
 		return NULL;
+	
 	}
 
-
+	// When IP not found in elastic, request to DNS API
 	struct DNS_HEADER *dns = NULL;
 	dns = (struct DNS_HEADER *)(char*)buf;
-	char       *enc;
-	unsigned char       *out;
-	size_t      out_len;
-	if (dns->qr == 0 && dns->opcode == 0 )
+	char *enc;
+	unsigned char *out;
+	size_t out_len;
+	if (dns->qr == 0 && dns->opcode == 0) // QR and OPCODE must be equal to 0
 	{
+		char data[BUFSIZE] = DNS_API_DATA;
 
-		char data[BUFSIZE] = "{\"dns\": \"8.8.8.8\", \"port\": 53, \"data\":\"";
-
+		// encoding buffer to base64 and building POST data
 		enc = b64_encode((const unsigned char *)buf, read_bytes);
 		strcat(data, enc);
 		strcat(data, "\"}");
-		CURL *curl2;
-		CURLcode res2;
-		
-		/* In windows, this will init the winsock stuff */
-		curl_global_init(CURL_GLOBAL_ALL);
 
-		/* get a curl handle */
-		curl2 = curl_easy_init();
+		// https post request
+		struct string s;
+		request_response(&s, DNS_API, data, 1);
+
+		// obtaining request
 		struct json_object *parsed_json;
 		struct json_object *answer;
-		if(curl2) {
-			/* First set the URL that is about to receive our POST. This URL can
-			just as well be a https:// URL if that is what should receive the
-			data. */
-			struct string s;
-			init_string(&s);
-			curl_easy_setopt(curl2, CURLOPT_URL, "http://10.5.0.6:443/api/dns_resolver");
-			/* Now specify the POST data */
-			curl_easy_setopt(curl2, CURLOPT_POSTFIELDS, data);
-			curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-			curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &s);
+		parsed_json = json_tokener_parse(s.ptr);
+		json_object_object_get_ex(parsed_json, "answer", &answer);
 
-			/* Perform the request, res will get the return code */
-			res2 = curl_easy_perform(curl2);
-			parsed_json = json_tokener_parse(s.ptr);
-			json_object_object_get_ex(parsed_json, "answer", &answer);
-
-			free(s.ptr);
-			
-			/* Check for errors */
-			if(res2 != CURLE_OK)
-			fprintf(stderr, "curl_easy_perform() failed: %s\n",
-					curl_easy_strerror(res2));
-			
-
-			/* always cleanup */
-			curl_easy_cleanup(curl2);
-		}
-		curl_global_cleanup();
     	
-		
-		out_len = b64_decoded_size(json_object_get_string(answer));
-		out = malloc(out_len);
+		out_len = b64_decoded_size(json_object_get_string(answer)); // bytes length
+		out = malloc(out_len); // DNS API response
+
+		// Decoding DNS API response
 		b64_decode(json_object_get_string(answer), (unsigned char *)out, out_len);
 		
+		free(s.ptr);
 		write_file("r1.txt", out, out_len);
 
 	}
 	else printf("Not implemented\n");
 
+	// Storing response and its length in struct
     memcpy(response->response, out, out_len);
     response->bytes_response = out_len;
 	free(out);

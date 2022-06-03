@@ -10,4 +10,4 @@ RUN apt-get update && apt-get -y install libjson-c-dev
 COPY . /usr/src/myapp
 WORKDIR /usr/src/myapp
 RUN gcc -o u udp_server.c -pthread -lcurl -ljson-c
-CMD tail -f /dev/null
+CMD ["./u"]
