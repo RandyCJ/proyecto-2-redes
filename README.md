@@ -116,10 +116,11 @@ Si realizamos un GET zones, debería retornarnos el índice que creamos
 
 
 Para guardar un hostname en el índice zones, podemos escribir este
-comando.
+comando. 
 
-![image7](https://user-images.githubusercontent.com/61055501/171784401-6e97fdf0-130b-472b-b7f5-c4f9b302f104.png)
-
+![image7](https://user-images.githubusercontent.com/61055501/171784401-6e97fdf0-130b-472b-b7f5-c4f9b302f104.png)  
+*Esta es la estructura que debemos utilizar para guardar registros que funcionen con nuestro programa, en el caso de que no exista el campo index 
+o que este campo no contenga un número o caracteres que no sean numéricos, el programa no funcionará correctamente.*
 
 
 Si hacemos un GET de ese registro, nos lo retornará
