@@ -31,6 +31,17 @@ void error(char *msg)
 }
 
 void *handle_request(void *t_args){
+/*
+-----------------------------------------------------------------------
+    handle_request
+    Input: A struct with parameters to process request and send response 
+	to client
+    Output: void
+    Functioning: Receives DNS request parameters and client information,
+	process the DNS package and send to client the DNS response
+    
+-----------------------------------------------------------------------
+*/   	
 	struct response_data response; 
 	get_response(((struct args*)t_args)->buf, ((struct args*)t_args)->n, &response);
 

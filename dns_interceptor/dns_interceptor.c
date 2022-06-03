@@ -23,7 +23,7 @@ unsigned int dotted_decimal_to_int(char ip[]){
 
 void *write_file(char *path, unsigned char buf[], int bytes){
 	FILE *fp;
-	fp = fopen("h1.txt", "w+");
+	fp = fopen(path, "w+");
 
 	if (!fp) {
         printf("Unable to open/"
@@ -109,8 +109,6 @@ void build_dns_response(unsigned char response_query[], int count, unsigned char
 	response_query[3] = 128;
 	response_query[7] = 1;
 
-	// int count = read_bytes;
-
 	// NAME
 	for (int i = 0; i < strlen(hostname); i++)
 	{
@@ -125,7 +123,7 @@ void build_dns_response(unsigned char response_query[], int count, unsigned char
 	// CLASS (IN) = Internet
 	response_query[count++] = 0;
 	response_query[count++] = 1;
-	// TTL (colocar TTL de elastic search, o no?)
+	// TTL 
 	response_query[count++] = 0;
 	response_query[count++] = 0;
 	response_query[count++] = 0;

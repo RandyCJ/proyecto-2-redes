@@ -10,6 +10,15 @@ struct string {
 };
 
 void init_string(struct string *s) {
+/*
+-----------------------------------------------------------------------
+    init_string
+    Input: A empty struct to store the HTTP response
+    Output: Void
+    Functioning: Initialize the string struct
+    
+-----------------------------------------------------------------------
+*/
     s->len = 0;
     s->ptr = malloc(s->len+1);
     if (s->ptr == NULL) {
@@ -21,6 +30,16 @@ void init_string(struct string *s) {
 
 size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 {
+/*
+-----------------------------------------------------------------------
+    writefunc
+    Input: A pointer to save in a struct, size_t with size, size_t with 
+    number of members to write, empty struct to store the HTTP response
+    Output: Size_t
+    Functioning: Write in the string struct
+    
+-----------------------------------------------------------------------
+*/
     size_t new_len = s->len + size*nmemb;
     s->ptr = realloc(s->ptr, new_len+1);
     if (s->ptr == NULL) {
@@ -35,7 +54,17 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
 }
 
 void request_response(struct string *response, unsigned char url[], unsigned char data[], int flag){
+/*
+-----------------------------------------------------------------------
+    request_response
+    Input: A empty struct to store response, unsigned string with url,
+    unsigned string with POST data, int that have flag to decide whether 
+    to put headers or not
+    Output: void
+    Functioning: Send HTTP request (POST, GET) and stores response in a struct
     
+-----------------------------------------------------------------------
+*/   
     CURL *curl;
     CURLcode res;
     struct curl_slist *list = NULL;
@@ -46,14 +75,22 @@ void request_response(struct string *response, unsigned char url[], unsigned cha
     init_string(response);
 
   	if(curl) {
+
       curl_easy_setopt(curl, CURLOPT_URL, url);
+      /*SSL Certificate*/
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
       if (strcmp(data, "") != 0){
+
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+
       }
       if (flag == 0){
 				list = curl_slist_append(list, "Content-Type: application/json");
 				curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
       }
+      
+    
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
       /* Perform the request, res will get the return code */
