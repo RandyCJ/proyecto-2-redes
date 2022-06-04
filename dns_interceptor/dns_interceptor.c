@@ -65,6 +65,14 @@ void get_header_hostname(unsigned char buf[], struct hostname_rep *hostname_stru
 }
 
 void get_elastic_ip_and_index(struct elastic_data *elstc_data, char *elastic_ips){
+
+	// Checks if index exists
+	char elastic_ptr[BUFSIZE];
+	strcpy(elastic_ptr, elastic_ips);
+	regex_t reegex;
+	int index_found = regcomp( &reegex, VALID_INDEX_REGEX, REG_EXTENDED);
+	index_found = regexec( &reegex, elastic_ptr, 0, NULL, 0);
+
 	struct json_object *parsed_json;
 	struct json_object *ip;
 	char *tmp_ip = "";
@@ -91,14 +99,16 @@ void get_elastic_ip_and_index(struct elastic_data *elstc_data, char *elastic_ips
 		count ++;
 	}
 	
-	struct json_object *index;
-	json_object_object_get_ex(parsed_json, "index", &index);
-	tmp_index = atoi(json_object_get_string(index));
+	// if elasticsearch doesn't have index, returns first ip
+	if (index_found == 0){
+		struct json_object *index;
+		json_object_object_get_ex(parsed_json, "index", &index);
+		tmp_index = atoi(json_object_get_string(index));
+		if (tmp_index > count-2 ){
+			tmp_index = 0;
+		}
+	} else tmp_index = 0;
 	
-	if (tmp_index > count-2 )
-	{
-		tmp_index = 0;
-	}
 	elstc_data->ip = tmp_int_ips[tmp_index];
 	elstc_data->index = tmp_index;
 }

@@ -1,0 +1,72 @@
+Crear desde cero
+
+PUT /zones/host/www.google.com/_create
+{
+  "hostname": "www.google.com",
+  "TTL": "5",
+  "IP": "192.168.20.1",
+  "index": 0
+}
+
+PUT /zones/host/www.twitter.com/_create
+{
+  "hostname": "www.twitter.com",
+  "TTL": "10",
+  "IP": "152.2.4.123",
+  "index": 0
+}
+
+Actualizar registro entero
+
+PUT /zones/host/www.twitter.com/
+{
+  "hostname": "www.twitter.com",
+  "TTL": "10",
+  "IP": "152.2.4.123",
+  "index": 0
+}
+
+PUT zones/host/www.google.com
+{
+  "hostname": "www.google.com",
+  "TTL": "10",
+  "IP": "192.168.20.1",
+  "index": 0
+}
+
+
+Actualizar un solo campo
+
+POST zones/host/www.google.com/_update
+{
+  "doc": {
+    "IP": "192.168.20.1, 10.2.4.12, 194.100.50.3, 42.1.5.12"
+  }
+}
+
+POST zones/host/www.twitter.com/_update
+{
+  "doc": {
+    "IP": "nada"
+  }
+}
+
+POST zones/host/www.google.com/_update
+{
+  "doc": {
+    "IP": "nada"
+  }
+}
+
+POST zones/host/www.google.com/_update
+{
+  "doc": {
+    "index": 10
+  }
+}
+
+
+GET zones/host/www.twitter.com/_source
+GET zones/host/www.google.com/_source
+
+DELETE zones/host/www.twitter.com

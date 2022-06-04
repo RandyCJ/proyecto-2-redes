@@ -3,6 +3,7 @@
 #define DNS_API "http://10.5.0.6:443/api/dns_resolver"
 #define ELASTIC_API "10.5.0.5:9200/zones/host/"
 #define VALID_IP_REGEX "[0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9][.][0-9]?[0-9]?[0-9]"
+#define VALID_INDEX_REGEX "\"index\":"
 #define DNS_API_DATA "{\"dns\": \"8.8.8.8\", \"port\": 53, \"data\":\""
 
 struct DNS_HEADER
